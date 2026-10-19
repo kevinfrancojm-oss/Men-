@@ -4,6 +4,19 @@
  "whatsapp": "",
  "products": [
   {
+   "id": "mvexoono",
+   "name": "Empanadas espolvoreadas con nuez - cajeta",
+   "price": 30,
+   "category": "Pan",
+   "desc": "Paquete de 3 empandas medianas rellenas de cajeta y espolvoreadas con nuez.",
+   "sold": false,
+   "images": [
+    "img/mvexol7j37t.jpg",
+    "img/mvexomau8a5.jpg",
+    "img/mvexonbhqjz.jpg"
+   ]
+  },
+  {
    "id": "mvexn1cu",
    "name": "Rollito relleno de mermelada - mora",
    "price": 15,
