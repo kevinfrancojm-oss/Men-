@@ -2,5 +2,20 @@
  "name": "Mi Tienda",
  "tagline": "Snacks para todos los antojos",
  "whatsapp": "",
- "products": []
+ "products": [
+  {
+   "id": "mvexn1cu",
+   "name": "Rollito relleno de mermelada - mora",
+   "price": 15,
+   "category": "Pan",
+   "desc": "Rollito de pan relleno de mermelada de mora",
+   "sold": false,
+   "images": [
+    "img/mvexmwte4eu.jpg",
+    "img/mvexmy10ofv.jpg",
+    "img/mvexmyygxen.jpg",
+    "img/mvexmztzzr9.jpg"
+   ]
+  }
+ ]
 }
