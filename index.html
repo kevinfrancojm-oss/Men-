@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mi Tienda</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script>
+let D={name:'Mi Tienda',tagline:'',whatsapp:'',products:[]},q='',cat='';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'$'+Number(n||0).toLocaleString('es-MX',{maximumFractionDigits:2})+' MXN';
+fetch('products.json?'+Date.now()).then(r=>r.json()).then(d=>{D=d}).catch(()=>{}).finally(shell);
+function shell(){
+  document.title=D.name;
+  $('#app').innerHTML=`<div class="wrap"><header><h1>${esc(D.name)}</h1><p>${esc(D.tagline)}</p></header>
+  <div class="bar"><input type="search" id="q" placeholder="Buscar productos…" aria-label="Buscar productos"></div>
+  <div class="chips" id="chips"></div><main class="grid" id="grid"></main></div>
+  <footer>© ${new Date().getFullYear()} ${esc(D.name)}</footer><div id="modal"></div>`;
+  $('#q').oninput=e=>{q=e.target.value;grid()};
+  chips();grid();
+}
+function chips(){
+  const cs=[...new Set(D.products.map(p=>p.category).filter(Boolean))];
+  $('#chips').innerHTML=cs.length?['',...cs].map(c=>`<button class="chip ${c===cat?'on':''}" data-a="cat" data-c="${esc(c)}">${c?esc(c):'Todo'}</button>`).join(''):'';
+}
+function grid(){
+  const l=D.products.filter(p=>(!cat||p.category===cat)&&(p.name+' '+p.desc).toLowerCase().includes(q.toLowerCase()));
+  $('#grid').innerHTML=l.length?l.map(p=>`<div class="card" data-a="open" data-id="${esc(p.id)}">
+    <div class="ph">${p.images[0]?`<img loading="lazy" src="${esc(p.images[0])}" alt="${esc(p.name)}">`:'Sin imagen'}${p.sold?'<span class="tag">Agotado</span>':''}</div>
+    <h3>${esc(p.name)}</h3><div class="price">${money(p.price)}</div></div>`).join('')
+    :`<div class="empty">${D.products.length?'No encontramos resultados.':'Pronto habrá productos disponibles.'}</div>`;
+}
+function detail(p,i=0){
+  const wa=(D.whatsapp||'').replace(/\D/g,'');
+  $('#modal').innerHTML=`<div class="ov" data-a="bg"><div class="sheet">
+  <div class="big">${p.images[i]?`<img src="${esc(p.images[i])}" alt="${esc(p.name)}">`:''}</div>
+  ${p.images.length>1?`<div class="thumbs">${p.images.map((x,k)=>`<div class="th ${k===i?'on':''}" data-a="pic" data-id="${esc(p.id)}" data-i="${k}"><img src="${esc(x)}" alt=""></div>`).join('')}</div>`:''}
+  <h3 style="font-size:26px">${esc(p.name)}</h3><div style="font-size:18px">${money(p.price)}</div>
+  <div class="desc">${esc(p.desc)}</div>
+  <div class="row">${p.sold?'<span class="price">Agotado por ahora</span>':(wa?`<a class="btn pri" target="_blank" rel="noopener" href="https://wa.me/${wa}?text=${encodeURIComponent('Hola, me interesa: '+p.name+' ('+money(p.price)+')')}">Pedir por WhatsApp</a>`:'')}<button data-a="close">Cerrar</button></div></div></div>`;
+}
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-a]');if(!t)return;
+  const a=t.dataset.a,p=D.products.find(x=>x.id===t.dataset.id);
+  if(a==='bg'){if(e.target.classList.contains('ov'))$('#modal').innerHTML=''}
+  else if(a==='close')$('#modal').innerHTML='';
+  else if(a==='open'&&p)detail(p);
+  else if(a==='pic'&&p)detail(p,+t.dataset.i);
+  else if(a==='cat'){cat=t.dataset.c;chips();grid()}
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Administración</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app"></div>
+<script>
+const LS='tienda_admin';
+let cfg=JSON.parse(localStorage.getItem(LS)||'{}'),sha=null,D=null,edit=null,delId=null,local={};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const src=p=>local[p]||p;
+const toast=t=>{const e=document.createElement('div');e.className='toast';e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),3200)};
+const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,'')),c=>c.charCodeAt(0)));
+const b64enc=s=>{let t='';new TextEncoder().encode(s).forEach(c=>t+=String.fromCharCode(c));return btoa(t)};
+const api=(path,o={})=>fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`,{cache:'no-store',...o,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+cfg.token,...(o.headers||{})}});
+const guess=()=>{const h=location.hostname;return h.endsWith('.github.io')?{owner:h.split('.')[0],repo:location.pathname.split('/')[1]||h}:{}};
+
+function login(err){
+  const g={...guess(),...cfg};
+  $('#app').innerHTML=`<div class="box"><h2>Administración</h2>
+  <p class="note">Conecta tu repositorio de GitHub con tu token personal. Se guarda solo en este dispositivo.</p>
+  <label>Usuario de GitHub<input id="l-o"></label><label>Repositorio<input id="l-r"></label>
+  <label>Token (Contents: lectura y escritura)<input id="l-t" type="password" autocomplete="off"></label>
+  ${err?`<p style="color:#c0392b;margin:0">${esc(err)}</p>`:''}
+  <button class="pri" data-a="connect">Conectar</button></div>`;
+  $('#l-o').value=g.owner||'';$('#l-r').value=g.repo||'';
+}
+async function load(){
+  const r=await api('products.json');
+  if(!r.ok)throw new Error(r.status===401||r.status===403?'El token no es válido o no tiene permiso en este repositorio.':r.status===404?'No se encontró products.json en el repositorio.':'Error '+r.status);
+  const j=await r.json();sha=j.sha;D=JSON.parse(b64dec(j.content));
+}
+async function save(msg){
+  const r=await api('products.json',{method:'PUT',body:JSON.stringify({message:msg,content:b64enc(JSON.stringify(D,null,1)),sha})});
+  if(!r.ok){toast('No se pudo guardar. Recarga la página e inténtalo de nuevo.');return false}
+  sha=(await r.json()).content.sha;toast('Guardado. Se verá en la tienda en 1–2 minutos.');return true;
+}
+function panel(){
+  $('#app').innerHTML=`<div class="wrap"><header><h1>Administración</h1><p>${esc(D.name)}</p></header>
+  <div class="row" style="justify-content:flex-start;margin-bottom:20px"><button class="pri" data-a="new">+ Nuevo producto</button><button data-a="settings">Ajustes</button><a class="btn" href="index.html" target="_blank">Ver tienda</a><button data-a="logout">Cerrar sesión</button></div>
+  <div>${D.products.length?D.products.map(p=>`<div class="item">${p.images[0]?`<img src="${esc(src(p.images[0]))}" alt="">`:'<div class="ni"></div>'}
+  <div class="nm"><b>${esc(p.name)}</b>${p.sold?' · Agotado':''}<div class="note">$${Number(p.price||0)}${p.category?' · '+esc(p.category):''}</div></div>
+  <button data-a="edit" data-id="${esc(p.id)}">Editar</button><button data-a="del" data-id="${esc(p.id)}">${delId===p.id?'¿Seguro?':'Eliminar'}</button></div>`).join(''):'<p class="note">Aún no hay productos. Agrega el primero.</p>'}</div></div><div id="modal"></div>`;
+}
+const modal=h=>{$('#modal').innerHTML=`<div class="ov" data-a="bg"><div class="sheet">${h}</div></div>`};
+const closeM=()=>{$('#modal').innerHTML='';edit=null};
+function form(){
+  modal(`<h3>${edit.isNew?'Nuevo producto':'Editar producto'}</h3>
+  <label>Nombre<input id="f-n"></label><label>Precio (MXN)<input id="f-p" type="number" min="0" step="any" inputmode="decimal"></label>
+  <label>Categoría (opcional, ej. Dulces)<input id="f-c"></label><label>Descripción<textarea id="f-d" rows="3"></textarea></label>
+  <label class="chk"><input type="checkbox" id="f-s"> Marcar como agotado</label>
+  <div class="thumbs" id="f-th"></div>
+  <label class="btn" style="cursor:pointer">+ Agregar imágenes<input type="file" id="f-f" accept="image/*" multiple hidden></label>
+  <div class="row"><button data-a="close">Cancelar</button><button class="pri" data-a="savep">Guardar</button></div>`);
+  $('#f-n').value=edit.name;$('#f-p').value=edit.price;$('#f-c').value=edit.category||'';$('#f-d').value=edit.desc;$('#f-s').checked=edit.sold;
+  $('#f-f').onchange=upload;thumbs();
+}
+const thumbs=()=>{$('#f-th').innerHTML=edit.images.map((x,i)=>`<div class="th ${i?'':'on'}" data-a="cover" data-i="${i}" title="${i?'Tocar para hacer portada':'Portada'}"><img src="${esc(src(x))}" alt=""><b data-a="rmimg" data-i="${i}">×</b></div>`).join('')};
+const sync=()=>{edit.name=$('#f-n').value;edit.price=$('#f-p').value;edit.category=$('#f-c').value.trim();edit.desc=$('#f-d').value;edit.sold=$('#f-s').checked};
+async function shrink(f){
+  const b=await createImageBitmap(f),s=Math.min(1,1400/Math.max(b.width,b.height)),c=document.createElement('canvas');
+  c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+  return new Promise(r=>c.toBlob(r,'image/jpeg',.85));
+}
+async function upload(e){
+  sync();toast('Subiendo imágenes…');
+  for(const f of e.target.files){
+    try{
+      const blob=await shrink(f),path='img/'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)+'.jpg';
+      const data=await new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.readAsDataURL(blob)});
+      const r=await api(path,{method:'PUT',body:JSON.stringify({message:'Agregar imagen',content:data})});
+      if(!r.ok)throw 0;
+      local[path]=URL.createObjectURL(blob);edit.images.push(path);
+    }catch(err){toast('No se pudo subir una imagen')}
+  }
+  thumbs();
+}
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-a]');if(!t)return;
+  const a=t.dataset.a,id=t.dataset.id,i=+t.dataset.i;
+  if(a==='bg'){if(e.target.classList.contains('ov'))closeM();return}
+  if(a==='connect'){
+    cfg={owner:$('#l-o').value.trim(),repo:$('#l-r').value.trim(),token:$('#l-t').value.trim()||cfg.token};
+    try{await load();localStorage.setItem(LS,JSON.stringify(cfg));panel()}catch(err){login(err.message)}
+  }
+  else if(a==='logout'){localStorage.removeItem(LS);cfg={};D=null;login()}
+  else if(a==='close')closeM();
+  else if(a==='new'){edit={isNew:1,name:'',price:'',category:'',desc:'',sold:false,images:[]};form()}
+  else if(a==='edit'){edit={...D.products.find(x=>x.id===id)};edit.images=[...edit.images];form()}
+  else if(a==='del'){
+    if(delId===id){D.products=D.products.filter(x=>x.id!==id);delId=null;panel();await save('Eliminar producto')}
+    else{delId=id;panel();setTimeout(()=>{if(delId===id){delId=null;panel()}},3000)}
+  }
+  else if(a==='cover'){sync();edit.images.unshift(edit.images.splice(i,1)[0]);thumbs()}
+  else if(a==='rmimg'){e.stopPropagation();sync();edit.images.splice(i,1);thumbs()}
+  else if(a==='savep'){
+    sync();if(!edit.name.trim())return toast('Escribe un nombre');
+    const o={id:edit.id||Date.now().toString(36),name:edit.name.trim(),price:Number(edit.price)||0,category:edit.category,desc:edit.desc.trim(),sold:edit.sold,images:edit.images};
+    const k=D.products.findIndex(x=>x.id===o.id);k>=0?D.products[k]=o:D.products.unshift(o);
+    closeM();panel();await save('Actualizar productos');
+  }
+  else if(a==='settings'){
+    modal(`<h3>Ajustes de la tienda</h3><label>Nombre<input id="s-n"></label><label>Frase corta<input id="s-t"></label>
+    <label>WhatsApp con lada (opcional, ej. 5218112345678)<input id="s-w" inputmode="numeric"></label>
+    <div class="row"><button data-a="close">Cancelar</button><button class="pri" data-a="saves">Guardar</button></div>`);
+    $('#s-n').value=D.name;$('#s-t').value=D.tagline;$('#s-w').value=D.whatsapp||'';
+  }
+  else if(a==='saves'){D.name=$('#s-n').value.trim()||'Mi Tienda';D.tagline=$('#s-t').value.trim();D.whatsapp=$('#s-w').value.trim();closeM();panel();await save('Actualizar ajustes')}
+});
+(async()=>{if(cfg.token){try{await load();panel();return}catch(e){login(e.message);return}}login()})();
+</script>
+</body>
+</html>
